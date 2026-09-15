@@ -1,92 +1,168 @@
-"""Pydantic data models for Chainlinkd."""
+"""Domain model for Chainlinkd.
+
+This layer holds the habit objects, the periodicity logic and nothing else:
+it imports neither Textual nor ``sqlite3`` so it can be tested in isolation.
+The design follows the Strategy pattern (Gamma et al., 1994) — cadence-specific
+behaviour lives in a :class:`Periodicity` hierarchy that :class:`Habit`
+composes, rather than in ``Habit`` subclasses.
+"""
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
-from enum import Enum
-from uuid import uuid4
-
-from pydantic import BaseModel, Field, field_validator
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta, timezone
 
 
-class Frequency(str, Enum):
-    """How often a habit is expected to be performed."""
-
-    DAILY = "daily"
-    WEEKLY = "weekly"
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
 
 
-class HabitEntry(BaseModel):
-    """A single record that a habit was completed on a given day."""
-
-    on: date
-    note: str = ""
-
-    @field_validator("on")
-    @classmethod
-    def not_in_future(cls, value: date) -> date:
-        if value > date.today():
-            raise ValueError("cannot log a habit entry in the future")
-        return value
+# --- periodicity ---------------------------------------------------------
 
 
-class Habit(BaseModel):
-    """A habit the user is tracking, plus its completion history."""
+class Periodicity(ABC):
+    """A cadence: it knows where the period containing a date begins and
+    where the next one starts. Consumers call this polymorphic interface and
+    never branch on the concrete cadence.
+    """
 
-    id: str = Field(default_factory=lambda: uuid4().hex)
-    name: str = Field(min_length=1, max_length=100)
-    frequency: Frequency = Frequency.DAILY
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
-    entries: list[HabitEntry] = Field(default_factory=list)
+    #: stable identifier persisted alongside each habit
+    label: str
 
-    @field_validator("name")
-    @classmethod
-    def strip_name(cls, value: str) -> str:
-        stripped = value.strip()
-        if not stripped:
-            raise ValueError("habit name cannot be blank")
-        return stripped
+    @abstractmethod
+    def period_start(self, day: date) -> date:
+        """Return the first day of the period that contains ``day``."""
 
-    # --- behaviour -------------------------------------------------------
+    @abstractmethod
+    def next_period(self, day: date) -> date:
+        """Return the ``period_start`` of the period following ``day``'s."""
 
-    def is_done_on(self, day: date) -> bool:
-        """Return True if this habit has an entry for ``day``."""
-        return any(entry.on == day for entry in self.entries)
+    def periods_between(self, earlier: date, later: date) -> int:
+        """Count period boundaries crossed from ``earlier`` to ``later``.
 
-    def mark_done(self, day: date | None = None, note: str = "") -> bool:
-        """Log completion for ``day`` (defaults to today).
-
-        Returns True if a new entry was added, False if it already existed.
+        Zero means both dates fall in the same period; one means ``later``
+        sits in the period immediately following ``earlier``'s, and so on.
+        Implemented once here in terms of the two abstract methods, so every
+        cadence — daily, weekly and a later monthly one — reuses it.
         """
-        day = day or date.today()
-        if self.is_done_on(day):
-            return False
-        self.entries.append(HabitEntry(on=day, note=note))
-        self.entries.sort(key=lambda e: e.on)
-        return True
-
-    def unmark(self, day: date | None = None) -> bool:
-        """Remove the entry for ``day``. Returns True if one was removed."""
-        day = day or date.today()
-        before = len(self.entries)
-        self.entries = [e for e in self.entries if e.on != day]
-        return len(self.entries) < before
-
-    def current_streak(self, today: date | None = None) -> int:
-        """Count consecutive completed days ending today (daily habits)."""
-        today = today or date.today()
-        done = {e.on for e in self.entries}
-        streak = 0
-        cursor = today
-        while cursor in done:
-            streak += 1
-            cursor = date.fromordinal(cursor.toordinal() - 1)
-        return streak
+        start = self.period_start(earlier)
+        goal = self.period_start(later)
+        count = 0
+        while start < goal:
+            start = self.next_period(start)
+            count += 1
+        return count
 
 
-class HabitDB(BaseModel):
-    """Top-level container persisted to disk."""
+class DailyPeriodicity(Periodicity):
+    """A habit expected once per calendar day."""
 
-    habits: list[Habit] = Field(default_factory=list)
+    label = "daily"
+
+    def period_start(self, day: date) -> date:
+        return day
+
+    def next_period(self, day: date) -> date:
+        return day + timedelta(days=1)
+
+
+class WeeklyPeriodicity(Periodicity):
+    """A habit expected once per ISO week (weeks begin on Monday)."""
+
+    label = "weekly"
+
+    def period_start(self, day: date) -> date:
+        return day - timedelta(days=day.weekday())
+
+    def next_period(self, day: date) -> date:
+        return self.period_start(day) + timedelta(days=7)
+
+
+#: single shared instances — periodicities are stateless flyweights
+DAILY = DailyPeriodicity()
+WEEKLY = WeeklyPeriodicity()
+
+_BY_LABEL: dict[str, Periodicity] = {DAILY.label: DAILY, WEEKLY.label: WEEKLY}
+
+
+def periodicity_from_label(label: str) -> Periodicity:
+    """Reconstruct a :class:`Periodicity` from its persisted ``label``."""
+    try:
+        return _BY_LABEL[label]
+    except KeyError:
+        raise ValueError(f"unknown periodicity label: {label!r}") from None
+
+
+# --- records -------------------------------------------------------------
+
+
+@dataclass
+class HabitLog:
+    """A completion recorded against a habit.
+
+    Stores the full ``completed_at`` timestamp alongside ``period_start`` —
+    the start of the period the completion falls in, computed by the habit's
+    :class:`Periodicity` at write time. That derived value lets the database
+    enforce "at most one completion per period" with a unique constraint.
+    """
+
+    completed_at: datetime
+    period_start: date
+    habit_id: int | None = None
+    id: int | None = None
+
+    def as_row(self) -> tuple[int | None, str, str]:
+        """Return the persistable ``(habit_id, completed_at, period_start)``."""
+        return (
+            self.habit_id,
+            self.completed_at.isoformat(),
+            self.period_start.isoformat(),
+        )
+
+
+@dataclass
+class Habit:
+    """A tracked habit: its identity, its cadence and its completion history.
+
+    ``id`` is ``None`` until the repository has persisted the habit and
+    assigned the SQLite rowid.
+    """
+
+    name: str
+    description: str = ""
+    periodicity: Periodicity = DAILY
+    created_at: datetime = field(default_factory=_utcnow)
+    logs: list[HabitLog] = field(default_factory=list)
+    id: int | None = None
+
+    def __post_init__(self) -> None:
+        self.name = self.name.strip()
+        if not self.name:
+            raise ValueError("habit name cannot be blank")
+
+    def complete(self, at: datetime | None = None) -> HabitLog:
+        """Build a :class:`HabitLog` for completion at ``at`` (default: now).
+
+        The log's ``period_start`` is derived from this habit's periodicity.
+        The returned log is appended to ``logs`` but not persisted — that is
+        the repository's job.
+        """
+        at = at or _utcnow()
+        log = HabitLog(
+            completed_at=at,
+            period_start=self.periodicity.period_start(at.date()),
+            habit_id=self.id,
+        )
+        self.logs.append(log)
+        return log
+
+    def is_due(self, on: date | None = None) -> bool:
+        """Return True if the period containing ``on`` has no completion yet."""
+        on = on or date.today()
+        target = self.periodicity.period_start(on)
+        return target not in self.completed_periods()
+
+    def completed_periods(self) -> list[date]:
+        """Return the sorted, de-duplicated period starts that are done."""
+        return sorted({log.period_start for log in self.logs})
