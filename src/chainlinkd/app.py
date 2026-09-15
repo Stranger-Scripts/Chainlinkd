@@ -14,7 +14,7 @@ from textual.app import App, ComposeResult
 from textual.widgets import DataTable, Footer, Header
 
 from . import analytics
-from .repository import HabitRepository, connect
+from .repository import ClockWentBackwardError, HabitRepository, connect
 
 
 def _chain(habit, today: date, width: int = 7) -> str:
@@ -55,12 +55,26 @@ class ChainlinkdApp(App):
     def on_mount(self) -> None:
         table = self.query_one("#habits", DataTable)
         table.add_columns("Habit", "Cadence", "Chain", "Streak", "Rate")
+        self._warn_if_clock_backward()
         self.refresh_table()
+
+    def _warn_if_clock_backward(self) -> None:
+        check = self.repo.clock_check()
+        if not check.ok:
+            self.notify(
+                f"System clock is behind by {check.backward_by}. Streaks use "
+                "your clock — new completions for 'now' are blocked until it "
+                "catches up.",
+                title="Clock warning",
+                severity="warning",
+                timeout=10,
+            )
+        self.repo.mark_seen(check.now)
 
     def refresh_table(self) -> None:
         table = self.query_one("#habits", DataTable)
         table.clear()
-        today = date.today()
+        today = self.repo.today()
         for habit in self.repo.list_all():
             table.add_row(
                 habit.name,
@@ -82,9 +96,13 @@ class ChainlinkdApp(App):
         habit = self._selected_habit()
         if habit is None:
             return
-        today = date.today()
+        today = self.repo.today()
         if habit.is_due(today):
-            self.repo.log(habit.id)
+            try:
+                self.repo.log(habit.id)
+            except ClockWentBackwardError as exc:
+                self.notify(str(exc), title="Clock warning", severity="error")
+                return
         else:
             self.repo.unlog(habit.id, habit.periodicity.period_start(today))
         self.refresh_table()

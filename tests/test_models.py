@@ -1,4 +1,5 @@
 from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -6,6 +7,7 @@ from chainlinkd import analytics
 from chainlinkd.models import (
     DAILY,
     WEEKLY,
+    Clock,
     Habit,
     periodicity_from_label,
 )
@@ -40,6 +42,25 @@ def test_periodicity_from_label_roundtrip():
     assert periodicity_from_label("weekly") is WEEKLY
     with pytest.raises(ValueError):
         periodicity_from_label("monthly")
+
+
+# --- clock / timezone ----------------------------------------------------
+
+
+def test_clock_local_date_crosses_midnight():
+    berlin = Clock(ZoneInfo("Europe/Berlin"))
+    # 22:30 UTC on the 15th is 00:30 on the 16th in Berlin (summer, +02:00).
+    moment = datetime(2026, 7, 15, 22, 30, tzinfo=timezone.utc)
+    assert berlin.local_date(moment) == date(2026, 7, 16)
+    # ...whereas a UTC clock keeps it on the 15th.
+    assert Clock().local_date(moment) == date(2026, 7, 15)
+
+
+def test_complete_uses_local_day_for_period_start():
+    berlin = Clock(ZoneInfo("Europe/Berlin"))
+    h = Habit(name="Meditate", periodicity=DAILY, clock=berlin)
+    log = h.complete(datetime(2026, 7, 15, 22, 30, tzinfo=timezone.utc))
+    assert log.period_start == date(2026, 7, 16)
 
 
 # --- habit ---------------------------------------------------------------

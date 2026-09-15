@@ -27,9 +27,9 @@ CREATE TABLE IF NOT EXISTS habit_logs (
     FOREIGN KEY (habit_id) REFERENCES habits (id) ON DELETE CASCADE,
     UNIQUE (habit_id, period_start)
 );
-
-CREATE INDEX IF NOT EXISTS idx_habit_logs_habit_id
-    ON habit_logs (habit_id);
+-- No separate index on habit_id is needed: the UNIQUE constraint above
+-- creates a composite index whose leftmost column already serves lookups
+-- (and ORDER BY period_start) for a single habit.
 
 -- Key/value table for the schema version and the one-shot seeded flag, so
 -- re-seeding on later runs is idempotent.
@@ -40,3 +40,9 @@ CREATE TABLE IF NOT EXISTS meta (
 
 INSERT OR IGNORE INTO meta (key, value) VALUES ('schema_version', '1');
 INSERT OR IGNORE INTO meta (key, value) VALUES ('seeded', '0');
+-- IANA timezone the app derives period boundaries from. Empty until set on
+-- first run (the presentation layer prompts, defaulting to the system zone).
+INSERT OR IGNORE INTO meta (key, value) VALUES ('timezone', '');
+-- High-water mark of the wall clock, used to detect the system clock being
+-- turned backwards between runs. Empty until the first write/startup.
+INSERT OR IGNORE INTO meta (key, value) VALUES ('last_seen_at', '');

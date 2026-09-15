@@ -71,7 +71,7 @@ def current_streak(habit: Habit, on: date | None = None) -> int:
     yet complete does not break the streak (the current period may still be
     open), but any genuine gap before it does.
     """
-    on = on or date.today()
+    on = on or habit.clock.today()
     periodicity = habit.periodicity
     done = set(habit.completed_periods())
 
@@ -98,9 +98,9 @@ def completion_rate(habit: Habit, on: date | None = None) -> float:
     The denominator is the number of periods from the habit's creation date
     through the period containing ``on``, inclusive.
     """
-    on = on or date.today()
+    on = on or habit.clock.today()
     periodicity = habit.periodicity
-    start = periodicity.period_start(habit.created_at.date())
+    start = periodicity.period_start(habit.clock.local_date(habit.created_at))
     end = periodicity.period_start(on)
     total = periodicity.periods_between(start, end) + 1
     if total <= 0:

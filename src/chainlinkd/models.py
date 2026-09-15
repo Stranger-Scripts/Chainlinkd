@@ -12,10 +12,44 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+UTC = ZoneInfo("UTC")
 
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+@dataclass(frozen=True)
+class Clock:
+    """Maps instants to the user's local calendar day.
+
+    Completions are stored in UTC, but "which day did this count for" is a
+    question about the *user's* calendar, so period boundaries are derived
+    from a configured timezone rather than from UTC or the raw system date.
+    Injected into habits by the repository; defaults to UTC so the domain and
+    its tests need no configuration.
+    """
+
+    tz: ZoneInfo = UTC
+
+    def now(self) -> datetime:
+        """The current instant as an aware UTC datetime."""
+        return datetime.now(timezone.utc)
+
+    def today(self) -> date:
+        """The current date in the configured zone."""
+        return self.local_date(self.now())
+
+    def local_date(self, moment: datetime) -> date:
+        """The calendar date ``moment`` falls on in the configured zone.
+
+        Naive datetimes are assumed to be UTC (that is how they are stored).
+        """
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
+        return moment.astimezone(self.tz).date()
 
 
 # --- periodicity ---------------------------------------------------------
@@ -134,6 +168,7 @@ class Habit:
     periodicity: Periodicity = DAILY
     created_at: datetime = field(default_factory=_utcnow)
     logs: list[HabitLog] = field(default_factory=list)
+    clock: Clock = field(default_factory=Clock)
     id: int | None = None
 
     def __post_init__(self) -> None:
@@ -144,22 +179,25 @@ class Habit:
     def complete(self, at: datetime | None = None) -> HabitLog:
         """Build a :class:`HabitLog` for completion at ``at`` (default: now).
 
-        The log's ``period_start`` is derived from this habit's periodicity.
-        The returned log is appended to ``logs`` but not persisted — that is
-        the repository's job.
+        ``period_start`` is derived from the *local* day ``at`` falls on (per
+        this habit's clock) and this habit's periodicity. The returned log is
+        appended to ``logs`` but not persisted — that is the repository's job.
         """
-        at = at or _utcnow()
+        at = at or self.clock.now()
         log = HabitLog(
             completed_at=at,
-            period_start=self.periodicity.period_start(at.date()),
+            period_start=self.periodicity.period_start(self.clock.local_date(at)),
             habit_id=self.id,
         )
         self.logs.append(log)
         return log
 
     def is_due(self, on: date | None = None) -> bool:
-        """Return True if the period containing ``on`` has no completion yet."""
-        on = on or date.today()
+        """Return True if the period containing ``on`` has no completion yet.
+
+        ``on`` defaults to today in this habit's configured zone.
+        """
+        on = on or self.clock.today()
         target = self.periodicity.period_start(on)
         return target not in self.completed_periods()
 
