@@ -1,9 +1,9 @@
 """Textual UI for Chainlinkd.
 
 This is the presentation layer: it renders screens and turns key presses into
-repository/domain calls. It is deliberately thin — the full Dashboard / Manage
-/ Analysis surface described in the concept is a later milestone. For now it
-reads habits through the repository and toggles today's completion in place.
+repository/domain calls. The dashboard is the home surface -- today's habits,
+their chains and streaks -- and ``n`` / ``e`` / ``d`` open the Manage screen to
+create, edit and delete. Analysis (``a``) is a later milestone.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from textual.app import App, ComposeResult
 from textual.widgets import DataTable, Footer, Header
 
 from . import analytics
+from .manage import ManageScreen
 from .repository import ClockWentBackwardError, HabitRepository, connect
 
 
@@ -39,6 +40,9 @@ class ChainlinkdApp(App):
 
     BINDINGS = [
         ("space", "toggle_today", "Toggle today"),
+        ("n", "manage_new", "New"),
+        ("e", "manage_edit", "Edit"),
+        ("d", "manage_delete", "Delete"),
         ("q", "quit", "Quit"),
     ]
 
@@ -106,3 +110,21 @@ class ChainlinkdApp(App):
         else:
             self.repo.unlog(habit.id, habit.periodicity.period_start(today))
         self.refresh_table()
+
+    # --- manage ----------------------------------------------------------
+
+    def _open_manage(self, mode: str) -> None:
+        habit = self._selected_habit()
+        habit_id = habit.id if habit else None
+        self.push_screen(
+            ManageScreen(mode, habit_id), lambda _result: self.refresh_table()
+        )
+
+    def action_manage_new(self) -> None:
+        self._open_manage("new")
+
+    def action_manage_edit(self) -> None:
+        self._open_manage("edit")
+
+    def action_manage_delete(self) -> None:
+        self._open_manage("delete")
