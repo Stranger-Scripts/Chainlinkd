@@ -24,10 +24,18 @@ On first run the database is created and seeded with example habits.
 
 ### Keys
 
-| Key     | Action              |
-| ------- | ------------------- |
-| `space` | Toggle today's mark |
-| `q`     | Quit                |
+| Key     | Action                             |
+| ------- | ---------------------------------- |
+| `space` | Toggle today's mark                |
+| `n`     | New habit (Manage)                 |
+| `e`     | Edit selected habit (Manage)       |
+| `d`     | Delete selected habit (Manage)     |
+| `q`     | Quit                               |
+
+`n` / `e` / `d` open the **Manage** screen, which lists every habit and hosts
+create / edit / delete via a small form and a delete confirmation. Editing a
+habit's cadence recomputes its history (see below). `esc` returns to the
+dashboard.
 
 ## Architecture
 
@@ -36,8 +44,9 @@ Three layers with a strictly one-directional dependency
 
 ```
 src/chainlinkd/
-  app.py         # presentation — Textual UI
-  models.py      # domain — Habit, HabitLog, Periodicity (Daily/Weekly)
+  app.py         # presentation — Textual app + dashboard
+  manage.py      # presentation — Manage screen + create/edit/delete modals
+  models.py      # domain — Habit, HabitLog, Periodicity (Daily/Weekly), Clock
   analytics.py   # domain — pure streak/rate functions
   repository.py  # persistence — HabitRepository + SQLite connection
   schema.sql     # persistence — table definitions (shipped in the package)
@@ -46,6 +55,7 @@ src/chainlinkd/
 tests/
   test_models.py       # domain + analytics
   test_repository.py    # round-trip, cascade, unique constraint, seeding
+  test_app.py           # Manage flow driven through the Textual pilot
 ```
 
 The domain layer imports neither Textual nor `sqlite3`, so it can be tested in
