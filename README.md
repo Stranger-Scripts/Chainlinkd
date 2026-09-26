@@ -24,18 +24,30 @@ On first run the database is created and seeded with example habits.
 
 ### Keys
 
-| Key     | Action                             |
-| ------- | ---------------------------------- |
-| `space` | Toggle today's mark                |
-| `n`     | New habit (Manage)                 |
-| `e`     | Edit selected habit (Manage)       |
-| `d`     | Delete selected habit (Manage)     |
-| `q`     | Quit                               |
+| Key     | Action                                          |
+| ------- | ----------------------------------------------- |
+| `↑` `↓` | Move between habits                             |
+| `←` `→` | Move the viewing day back / forward             |
+| `t`     | Jump back to today                             |
+| `space` | Toggle the selected habit for the viewing day   |
+| `n`     | New habit (Manage)                             |
+| `e`     | Edit selected habit (Manage)                   |
+| `d`     | Delete selected habit (Manage)                 |
+| `a`     | Analysis (per-habit metrics)                   |
+| `s`     | Settings (timezone)                            |
+| `q`     | Quit                                           |
+
+The chain column shows the seven periods ending on the **viewing day** (shown
+in the header). `←` moves that day into the past so you can fill in a period
+you missed — `space` there backfills it; `→` moves forward but never past
+today. `t` returns to today.
 
 `n` / `e` / `d` open the **Manage** screen, which lists every habit and hosts
 create / edit / delete via a small form and a delete confirmation. Editing a
-habit's cadence recomputes its history (see below). `esc` returns to the
-dashboard.
+habit's cadence recomputes its history (see below). `a` opens **Analysis** -- a
+table of current streak, longest streak, completion rate and total completions
+per habit, plus the longest streak across all habits. `s` opens **Settings** to
+change the timezone. `esc` returns to the dashboard.
 
 ## Architecture
 
@@ -44,8 +56,10 @@ Three layers with a strictly one-directional dependency
 
 ```
 src/chainlinkd/
-  app.py         # presentation — Textual app + dashboard
+  app.py         # presentation — Textual app + dashboard (day-nav, backfill)
   manage.py      # presentation — Manage screen + create/edit/delete modals
+  analysis.py    # presentation — Analysis screen (per-habit metrics)
+  settings.py    # presentation — Settings screen (timezone)
   models.py      # domain — Habit, HabitLog, Periodicity (Daily/Weekly), Clock
   analytics.py   # domain — pure streak/rate functions
   repository.py  # persistence — HabitRepository + SQLite connection
