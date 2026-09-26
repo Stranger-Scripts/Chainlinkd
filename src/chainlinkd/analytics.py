@@ -108,6 +108,11 @@ def completion_rate(habit: Habit, on: date | None = None) -> float:
     return len(habit.completed_periods()) / total
 
 
+def total_completions(habit: Habit) -> int:
+    """Number of periods the habit has been completed (one per period)."""
+    return len(habit.completed_periods())
+
+
 def _previous_period(periodicity, day: date) -> date:
     """Return the ``period_start`` of the period immediately before ``day``'s.
 

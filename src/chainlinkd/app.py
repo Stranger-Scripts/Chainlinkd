@@ -17,6 +17,7 @@ from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header
 
 from . import analytics
+from .analysis import AnalysisScreen
 from .manage import ManageScreen
 from .models import Habit
 from .repository import ClockWentBackwardError, HabitRepository, connect
@@ -50,6 +51,7 @@ class DashboardScreen(Screen):
         ("n", "manage_new", "New"),
         ("e", "manage_edit", "Edit"),
         ("d", "manage_delete", "Delete"),
+        ("a", "analysis", "Analysis"),
         ("s", "settings", "Settings"),
         ("q", "quit", "Quit"),
     ]
@@ -175,6 +177,9 @@ class DashboardScreen(Screen):
 
     def action_manage_delete(self) -> None:
         self._open_manage("delete")
+
+    def action_analysis(self) -> None:
+        self.app.push_screen(AnalysisScreen(), lambda _result: self.refresh_table())
 
     def action_settings(self) -> None:
         self.app.push_screen(SettingsScreen(), self._after_settings)
