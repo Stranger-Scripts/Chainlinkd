@@ -1,3 +1,5 @@
+*.pdf
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -8,7 +10,10 @@ __pycache__/
 
 # Distribution / packaging
 .Python
-build/
+build/*
+# ...but keep the committed build script that lives under build/
+# (the spec is re-included below, after the *.spec rule).
+!build/build-linux.sh
 develop-eggs/
 dist/
 downloads/
@@ -31,6 +36,8 @@ MANIFEST
 #   before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
+# ...except, hand-written build spec.
+!build/chainlinkd.spec
 
 # Installer logs
 pip-log.txt

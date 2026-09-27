@@ -94,3 +94,27 @@ A lightweight guard records the highest wall-clock value seen (`last_seen_at`) a
 ```bash
 uv run pytest      # or: pytest
 ```
+
+## Build a standalone executable
+
+[`build/build-linux.sh`](build/build-linux.sh) automates a Linux x86-64 build
+with PyInstaller, driven by [`build/chainlinkd.spec`](build/chainlinkd.spec).
+The bundle includes Python, Textual and the packaged `schema.sql`, so it runs
+on a machine with no Python installed.
+
+```bash
+uv sync                 # ensure the venv has the runtime deps
+./build/build-linux.sh
+```
+
+The result is a onedir bundle at `dist/chainlinkd/`; run it with
+`./dist/chainlinkd/chainlinkd`. PyInstaller builds for the platform you run it
+on (no cross-compilation). The thin entry point it analyses lives at
+[`packaging/launcher.py`](packaging/launcher.py).
+
+To build without the script (PyInstaller comes from the `build` extra):
+
+```bash
+pip install -e ".[build]"
+uv run pyinstaller build/chainlinkd.spec --clean --noconfirm
+```
