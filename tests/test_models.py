@@ -127,3 +127,26 @@ def test_completion_rate_full_and_partial():
     h2 = Habit(name="Skip", created_at=_dt(2026, 9, 13))
     h2.complete(_dt(2026, 9, 13))
     assert analytics.completion_rate(h2, on=date(2026, 9, 15)) == pytest.approx(1 / 3)
+
+
+def test_total_completions_counts_periods():
+    h = Habit(name="Journal")
+    assert analytics.total_completions(h) == 0
+    for day in (1, 2, 3):
+        h.complete(_dt(2026, 9, day))
+    h.complete(_dt(2026, 9, 3))  # same period again — not double-counted
+    assert analytics.total_completions(h) == 3
+
+
+def test_longest_streak_overall_across_habits():
+    a = Habit(name="A")
+    for day in (1, 2):
+        a.complete(_dt(2026, 9, day))
+    b = Habit(name="B")
+    for day in (10, 11, 12, 13):
+        b.complete(_dt(2026, 9, day))
+    assert analytics.longest_streak_overall([a, b]) == 4
+    assert analytics.longest_streak_overall([]) == 0
+    assert analytics.longest_streak_overall_name([a, b]) == "B"
+    assert analytics.longest_streak_overall_name([]) == "N/A"
+    assert analytics.longest_streak_overall_name([Habit(name="Fresh")]) == "N/A"
