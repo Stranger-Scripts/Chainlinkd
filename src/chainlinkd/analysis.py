@@ -56,8 +56,9 @@ class AnalysisScreen(Screen):
             )
 
         overall = analytics.longest_streak_overall(habits)
+        habitname = analytics.longest_streak_overall_name(habits)
         self.query_one("#summary", Label).update(
-            f"Longest streak across all habits: {overall}"
+            f"Longest streak across all habits: {habitname}, {overall}"
         )
 
     def action_back(self) -> None:

@@ -92,6 +92,19 @@ def longest_streak_overall(habits: list[Habit]) -> int:
     return max((longest_streak(h) for h in habits), default=0)
 
 
+def longest_streak_overall_name(habits: list[Habit]) -> str:
+    """Name of the habit holding the longest streak (``"N/A"`` if none).
+
+    Returns ``"N/A"`` when there are no habits or none has a streak yet (best
+    streak of zero); on a tie the earliest-created habit wins. Pairs with
+    :func:`longest_streak_overall`, which returns the matching length.
+    """
+    best = max(habits, key=longest_streak, default=None)
+    if best is None or longest_streak(best) == 0:
+        return "N/A"
+    return best.name
+
+
 def completion_rate(habit: Habit, on: date | None = None) -> float:
     """Fraction of periods completed since creation, in ``[0.0, 1.0]``.
 
