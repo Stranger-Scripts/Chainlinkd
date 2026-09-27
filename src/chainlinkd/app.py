@@ -23,19 +23,25 @@ from .models import Habit
 from .repository import ClockWentBackwardError, HabitRepository, connect
 from .settings import SettingsScreen
 
-CHAIN_WIDTH = 7
-
-
-def _chain(habit: Habit, last_day: date, width: int = CHAIN_WIDTH) -> str:
+def _chain(habit: Habit, last_day: date) -> str:
     """Render the ``width`` periods ending at ``last_day`` as links: ○○●●●●●"""
     periodicity = habit.periodicity
     done = set(habit.completed_periods())
-    cells = []
+
+    periods: list[date] = []
     cursor = periodicity.period_start(last_day)
-    for _ in range(width):
-        cells.append("●" if cursor in done else "○")
+    for _ in range(periodicity.chain_length):
+        periods.append(cursor)
         cursor = periodicity.period_start(cursor - timedelta(days=1))
-    return "".join(reversed(cells))
+    periods.reverse()  # oldest → newest
+
+    labels = [periodicity.tick_label(p) for p in periods]
+    cells = [
+        f"{label}{'●' if period in done else '○'}" if label
+        else ("●" if period in done else "○")
+        for period, label in zip(periods, labels)
+    ]
+    return " ".join(cells) if any(labels) else "".join(cells)
 
 
 class DashboardScreen(Screen):
@@ -71,7 +77,7 @@ class DashboardScreen(Screen):
 
     def on_mount(self) -> None:
         table = self.query_one("#habits", DataTable)
-        table.add_columns("Habit", "Cadence", f"Chain (…{CHAIN_WIDTH}d)", "Streak", "Rate")
+        table.add_columns("Habit", "Cadence", "Chain", "Streak", "Rate")
         table.focus()
         self._viewing_day = self.repo.today()
         self._warn_if_clock_backward()

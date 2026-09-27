@@ -7,7 +7,8 @@ there), the shapes are:
 * an unbroken 28-day daily chain,
 * a daily habit with a gap that splits it into two runs,
 * a daily run still open at the window's end,
-* two weekly habits done in some weeks and missed in others.
+* two weekly habits done in some weeks and missed in others,
+* a monthly habit with several months of history and one month skipped.
 
 The fixture therefore doubles as the expected-value table for the streak
 tests, which is why ``seed_habits`` accepts an explicit ``today``.
@@ -17,14 +18,26 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
 
-from .models import DAILY, WEEKLY, Habit
+from .models import DAILY, MONTHLY, WEEKLY, Habit
 
 WINDOW_DAYS = 28
+MONTHS_SHOWN = 6
 
 
 def _at(today: date, days_ago: int) -> datetime:
     """A timestamp at noon UTC, ``days_ago`` days before ``today``."""
     return datetime.combine(today - timedelta(days=days_ago), time(12), timezone.utc)
+
+
+def _recent_month_firsts(today: date, count: int) -> list[date]:
+    """First-of-month dates for the ``count`` most recent months, oldest first."""
+    firsts: list[date] = []
+    cursor = MONTHLY.period_start(today)
+    for _ in range(count):
+        firsts.append(cursor)
+        cursor = MONTHLY.period_start(cursor - timedelta(days=1))
+    firsts.reverse()
+    return firsts
 
 
 def seed_habits(today: date | None = None) -> list[Habit]:
@@ -71,4 +84,19 @@ def seed_habits(today: date | None = None) -> list[Habit]:
     for days_ago in (3, 17, 24):
         family.complete(_at(today, days_ago))
 
-    return [meditate, exercise, read, finances, family]
+    # 6. Monthly habit with months of history; the last-but-one month skipped.
+    months = _recent_month_firsts(today, MONTHS_SHOWN)
+    deep_clean = Habit(
+        name="Deep clean",
+        description="A thorough monthly tidy-up",
+        periodicity=MONTHLY,
+        created_at=datetime.combine(months[0], time(0), timezone.utc),
+    )
+    for index, first in enumerate(months):
+        if index == len(months) - 2:  # leave a gap just before this month
+            continue
+        deep_clean.complete(
+            datetime.combine(first.replace(day=5), time(12), timezone.utc)
+        )
+
+    return [meditate, exercise, read, finances, family, deep_clean]

@@ -23,7 +23,12 @@ from textual.widgets import (
 
 from .models import Habit, periodicity_from_label
 
-_CADENCES = [("Daily", "daily"), ("Weekly", "weekly")]
+_CADENCES = [
+    ("Daily", "daily"),
+    ("Weekly", "weekly"),
+    ("Monthly", "monthly"),
+    ("Yearly", "yearly"),
+]
 
 
 class HabitFormScreen(ModalScreen):

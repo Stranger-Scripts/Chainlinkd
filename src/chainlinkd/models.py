@@ -64,6 +64,9 @@ class Periodicity(ABC):
     #: stable identifier persisted alongside each habit
     label: str
 
+    #: how many periods the dashboard chain shows for this cadence
+    chain_length: int = 7
+
     @abstractmethod
     def period_start(self, day: date) -> date:
         """Return the first day of the period that contains ``day``."""
@@ -71,6 +74,15 @@ class Periodicity(ABC):
     @abstractmethod
     def next_period(self, day: date) -> date:
         """Return the ``period_start`` of the period following ``day``'s."""
+
+    def tick_label(self, period_start: date) -> str:
+        """Short per-period label for the dashboard chain, or ``""`` for none.
+
+        Fine cadences (daily, weekly) return ``""`` and render as bare links;
+        coarse cadences (monthly, yearly) label each tick so the period it
+        stands for is identifiable at a glance.
+        """
+        return ""
 
     def periods_between(self, earlier: date, later: date) -> int:
         """Count period boundaries crossed from ``earlier`` to ``later``.
@@ -113,11 +125,50 @@ class WeeklyPeriodicity(Periodicity):
         return self.period_start(day) + timedelta(days=7)
 
 
+class MonthlyPeriodicity(Periodicity):
+    """A habit expected once per calendar month."""
+
+    label = "monthly"
+    chain_length = 6
+
+    def period_start(self, day: date) -> date:
+        return day.replace(day=1)
+
+    def next_period(self, day: date) -> date:
+        first = day.replace(day=1)
+        if first.month == 12:
+            return first.replace(year=first.year + 1, month=1)
+        return first.replace(month=first.month + 1)
+
+    def tick_label(self, period_start: date) -> str:
+        return period_start.strftime("%b")  # Jan, Feb, …
+
+
+class YearlyPeriodicity(Periodicity):
+    """A habit expected once per calendar year."""
+
+    label = "yearly"
+    chain_length = 5
+
+    def period_start(self, day: date) -> date:
+        return day.replace(month=1, day=1)
+
+    def next_period(self, day: date) -> date:
+        return day.replace(year=day.year + 1, month=1, day=1)
+
+    def tick_label(self, period_start: date) -> str:
+        return period_start.strftime("%Y")
+
+
 #: single shared instances — periodicities are stateless flyweights
 DAILY = DailyPeriodicity()
 WEEKLY = WeeklyPeriodicity()
+MONTHLY = MonthlyPeriodicity()
+YEARLY = YearlyPeriodicity()
 
-_BY_LABEL: dict[str, Periodicity] = {DAILY.label: DAILY, WEEKLY.label: WEEKLY}
+_BY_LABEL: dict[str, Periodicity] = {
+    p.label: p for p in (DAILY, WEEKLY, MONTHLY, YEARLY)
+}
 
 
 def periodicity_from_label(label: str) -> Periodicity:
