@@ -37,10 +37,17 @@ On first run the database is created and seeded with example habits.
 | `s`     | Settings (timezone)                            |
 | `q`     | Quit                                           |
 
-The chain column shows the seven periods ending on the **viewing day** (shown
-in the header). `←` moves that day into the past so you can fill in a period
-you missed — `space` there backfills it; `→` moves forward but never past
-today. `t` returns to today.
+The chain column shows the recent periods ending on the **viewing day** (shown
+in the header). How many, and how they're drawn, depends on the habit's
+cadence: daily and weekly render as bare links (`○○●●●●●`), while monthly and
+yearly label each tick so the period is legible, e.g.
+`Apr● May● Jun○ Jul● Aug● Sep●`. `←` moves the viewing day into the past so you
+can fill in a period you missed — `space` there backfills it; `→` moves forward
+but never past today. `t` returns to today.
+
+Habits support four cadences — **daily**, **weekly**, **monthly** and
+**yearly** — chosen when you create or edit a habit. Streaks, rates and chains
+are all derived generically from the cadence, so the same logic serves each.
 
 `n` / `e` / `d` open the **Manage** screen, which lists every habit and hosts
 create / edit / delete via a small form and a delete confirmation. Editing a
@@ -60,7 +67,7 @@ src/chainlinkd/
   manage.py      # presentation — Manage screen + create/edit/delete modals
   analysis.py    # presentation — Analysis screen (per-habit metrics)
   settings.py    # presentation — Settings screen (timezone)
-  models.py      # domain — Habit, HabitLog, Periodicity (Daily/Weekly), Clock
+  models.py      # domain — Habit, HabitLog, Periodicity (Daily/Weekly/Monthly/Yearly), Clock
   analytics.py   # domain — pure streak/rate functions
   repository.py  # persistence — HabitRepository + SQLite connection
   schema.sql     # persistence — table definitions (shipped in the package)
