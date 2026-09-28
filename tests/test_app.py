@@ -6,13 +6,32 @@ only screen coverage the concept asks for.
 """
 
 import asyncio
-from datetime import timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from textual.widgets import DataTable, Input, Label, Select
 
-from chainlinkd.app import ChainlinkdApp, DashboardScreen
-from chainlinkd.models import Habit
+from chainlinkd.app import ChainlinkdApp, DashboardScreen, _chain
+from chainlinkd.models import DAILY, MONTHLY, Habit
 from chainlinkd.repository import HabitRepository, connect
+
+
+def test_chain_daily_renders_bare_dots():
+    h = Habit(name="Read", periodicity=DAILY)
+    h.complete(datetime(2026, 9, 15, 12, tzinfo=timezone.utc))
+    chain = _chain(h, date(2026, 9, 15))
+    assert len(chain) == DAILY.chain_length  # 7 bare marks, no separators
+    assert " " not in chain
+    assert chain.endswith("●")
+
+
+def test_chain_monthly_renders_labeled_ticks():
+    h = Habit(name="Deep clean", periodicity=MONTHLY)
+    h.complete(datetime(2026, 9, 10, 12, tzinfo=timezone.utc))  # September
+    chain = _chain(h, date(2026, 9, 15))
+    cells = chain.split()
+    assert len(cells) == MONTHLY.chain_length  # 6 labeled months
+    assert cells[-1] == "Sep●"                 # newest = viewing month, done
+    assert cells[0] == "Apr○"                  # six months back, not done
 
 
 def _repo(seeded: bool = True) -> HabitRepository:

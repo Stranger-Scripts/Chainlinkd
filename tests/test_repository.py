@@ -77,10 +77,10 @@ def test_unlog_toggles_off(repo):
 def test_seed_if_empty_runs_once(repo):
     assert repo.seed_if_empty() is True
     seeded = repo.list_all()
-    assert len(seeded) == 5
+    assert len(seeded) == 6
     # second call is a no-op guarded by the meta flag
     assert repo.seed_if_empty() is False
-    assert len(repo.list_all()) == 5
+    assert len(repo.list_all()) == 6
 
 
 # --- timezone --------------------------------------------------------------

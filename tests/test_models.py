@@ -6,7 +6,9 @@ import pytest
 from chainlinkd import analytics
 from chainlinkd.models import (
     DAILY,
+    MONTHLY,
     WEEKLY,
+    YEARLY,
     Clock,
     Habit,
     periodicity_from_label,
@@ -37,11 +39,34 @@ def test_periods_between_counts_boundaries():
     assert WEEKLY.periods_between(date(2026, 9, 1), date(2026, 9, 15)) == 2
 
 
+def test_monthly_period_boundaries():
+    assert MONTHLY.period_start(date(2026, 9, 15)) == date(2026, 9, 1)
+    assert MONTHLY.next_period(date(2026, 9, 15)) == date(2026, 10, 1)
+    # year wrap
+    assert MONTHLY.next_period(date(2026, 12, 10)) == date(2027, 1, 1)
+
+
+def test_yearly_period_boundaries():
+    assert YEARLY.period_start(date(2026, 9, 15)) == date(2026, 1, 1)
+    assert YEARLY.next_period(date(2026, 9, 15)) == date(2027, 1, 1)
+
+
+def test_monthly_streak_and_labels():
+    h = Habit(name="Deep clean", periodicity=MONTHLY)
+    for month in (7, 8, 9):  # Jul, Aug, Sep — three consecutive months
+        h.complete(_dt(2026, month, 5))
+    assert analytics.longest_streak(h) == 3
+    assert analytics.current_streak(h, on=date(2026, 9, 20)) == 3
+    assert MONTHLY.tick_label(date(2026, 9, 1)) == "Sep"
+
+
 def test_periodicity_from_label_roundtrip():
     assert periodicity_from_label("daily") is DAILY
     assert periodicity_from_label("weekly") is WEEKLY
+    assert periodicity_from_label("monthly") is MONTHLY
+    assert periodicity_from_label("yearly") is YEARLY
     with pytest.raises(ValueError):
-        periodicity_from_label("monthly")
+        periodicity_from_label("fortnightly")
 
 
 # --- clock / timezone ----------------------------------------------------
