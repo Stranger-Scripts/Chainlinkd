@@ -1,0 +1,158 @@
+name: Release
+
+# Builds the standalone Chainlinkd bundles for Linux and Windows and attaches
+# them to a GitHub Release.
+#
+# PyInstaller cannot cross-compile, so each platform is built on its own runner
+# and the two artifacts are collected by the `release` job afterwards.
+#
+# Triggered by pushing a version tag:
+#     git tag -a v1.0.0 -m "Chainlinkd 1.0.0"
+#     git push origin v1.0.0
+#
+# `workflow_dispatch` builds the same artifacts without publishing anything,
+# which is the way to rehearse a release before tagging.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Matches `requires-python` in pyproject.toml — build on the declared floor
+  # so the frozen interpreter is no newer than what the project claims.
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x86_64
+          - os: windows-latest
+            target: windows-x86_64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Python ${{ env.PYTHON_VERSION }}
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Sync dependencies
+        run: uv sync --extra build --extra dev --python ${{ env.PYTHON_VERSION }}
+
+      - name: Run tests
+        run: uv run pytest -q
+
+      - name: Build bundle
+        run: >
+          uv run pyinstaller build/chainlinkd.spec
+          --clean --noconfirm
+          --distpath dist
+          --workpath build-tmp
+
+      # A TUI can't be driven without a TTY, so `--version` is the smoke test:
+      # it exercises the frozen interpreter, the bundled package imports and the
+      # argparse entry point, then exits cleanly.
+      - name: Smoke test (Linux)
+        if: runner.os == 'Linux'
+        run: ./dist/chainlinkd/chainlinkd --version
+
+      - name: Smoke test (Windows)
+        if: runner.os == 'Windows'
+        run: .\dist\chainlinkd\chainlinkd.exe --version
+
+      # Guards the most common packaging regression: schema.sql is loaded via
+      # importlib.resources at runtime, so a missing copy only fails on first
+      # launch, well after the build has gone green.
+      - name: Verify bundled schema.sql
+        shell: bash
+        run: |
+          found=$(find dist/chainlinkd -name schema.sql -print -quit)
+          if [ -z "$found" ]; then
+            echo "error: schema.sql is missing from the bundle" >&2
+            exit 1
+          fi
+          echo "found bundled schema at: $found"
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="$(uv run python -c 'import chainlinkd; print(chainlinkd.__version__)')"
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: ${version}"
+
+      - name: Archive (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          name="chainlinkd-${{ steps.version.outputs.version }}-${{ matrix.target }}"
+          tar -czf "${name}.tar.gz" -C dist chainlinkd
+          sha256sum "${name}.tar.gz" > "${name}.tar.gz.sha256"
+
+      - name: Archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $name = "chainlinkd-${{ steps.version.outputs.version }}-${{ matrix.target }}"
+          Compress-Archive -Path dist\chainlinkd -DestinationPath "$name.zip"
+          (Get-FileHash "$name.zip" -Algorithm SHA256).Hash.ToLower() + "  $name.zip" `
+            | Out-File -Encoding ascii "$name.zip.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: chainlinkd-${{ matrix.target }}
+          path: |
+            *.tar.gz
+            *.tar.gz.sha256
+            *.zip
+            *.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Publish release
+    # Only a tag push publishes; a manual run stops after `build` so the
+    # artifacts can be inspected without creating a release.
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          gh release create "${GITHUB_REF_NAME}"
+          --title "Chainlinkd ${GITHUB_REF_NAME#v}"
+          --generate-notes
+          --verify-tag
+          artifacts/*

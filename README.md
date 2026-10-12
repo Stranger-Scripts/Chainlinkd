@@ -12,7 +12,12 @@ its *chain*.
 uv sync            # or: pip install -e ".[dev]"
 ```
 
-Requires Python 3.13+. 
+Requires Python 3.12+.
+
+Or grab a standalone build for your platform from the
+[latest release](https://github.com/Stranger-Scripts/Chainlinkd/releases/latest) —
+no Python needed. Verify the download against its `.sha256` sidecar, unpack, and
+run the `chainlinkd` binary inside.
 
 ## Run
 
@@ -21,6 +26,7 @@ uv run chainlinkd  # or: python -m chainlinkd
 ```
 
 On first run the database is created and seeded with example habits.
+`chainlinkd --version` prints the version and exits.
 
 ### Keys
 
@@ -104,24 +110,50 @@ uv run pytest      # or: pytest
 
 ## Build a standalone executable
 
-[`build/build-linux.sh`](build/build-linux.sh) automates a Linux x86-64 build
-with PyInstaller, driven by [`build/chainlinkd.spec`](build/chainlinkd.spec).
-The bundle includes Python, Textual and the packaged `schema.sql`, so it runs
-on a machine with no Python installed.
+One PyInstaller spec, [`build/chainlinkd.spec`](build/chainlinkd.spec), drives
+both platforms. The bundle includes Python, Textual and the packaged
+`schema.sql`, so it runs on a machine with no Python installed. The thin entry
+point PyInstaller analyses lives at [`packaging/launcher.py`](packaging/launcher.py).
+
+PyInstaller does **not** cross-compile: each platform must be built on itself.
 
 ```bash
-uv sync                 # ensure the venv has the runtime deps
+uv sync --extra build   # ensure the venv has the runtime + build deps
 ./build/build-linux.sh
 ```
 
-The result is a onedir bundle at `dist/chainlinkd/`; run it with
-`./dist/chainlinkd/chainlinkd`. PyInstaller builds for the platform you run it
-on (no cross-compilation). The thin entry point it analyses lives at
-[`packaging/launcher.py`](packaging/launcher.py).
+```powershell
+uv sync --extra build
+powershell -ExecutionPolicy Bypass -File build\build-windows.ps1
+```
 
-To build without the script (PyInstaller comes from the `build` extra):
+Either produces a onedir bundle at `dist/chainlinkd/`, launched via
+`./dist/chainlinkd/chainlinkd` (or `chainlinkd.exe` on Windows).
+
+To build without the wrapper scripts:
 
 ```bash
-pip install -e ".[build]"
 uv run pyinstaller build/chainlinkd.spec --clean --noconfirm
 ```
+
+## Releasing
+
+[`.github/workflows/release.yml`](.github/workflows/release.yml) builds both
+platforms on their own runners, smoke-tests each binary with `--version`,
+checks `schema.sql` survived bundling, and attaches the two archives plus
+SHA-256 sidecars to a GitHub Release.
+
+Push a version tag to cut a release:
+
+```bash
+git tag -a v1.0.0 -m "Chainlinkd 1.0.0"
+git push origin v1.0.0
+```
+
+Running the workflow manually (`workflow_dispatch`) builds and verifies the
+same artifacts without publishing, which is how to rehearse a release before
+tagging.
+
+The version has a single source of truth — `__version__` in
+[`src/chainlinkd/__init__.py`](src/chainlinkd/__init__.py), which hatchling
+reads for the package metadata. Bump it to match the tag.

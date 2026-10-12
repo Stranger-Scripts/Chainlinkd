@@ -11,9 +11,13 @@ __pycache__/
 # Distribution / packaging
 .Python
 build/*
-# ...but keep the committed build script that lives under build/
+# PyInstaller workpath used by CI (kept out of build/ so --clean can't race
+# the committed spec and scripts).
+build-tmp/
+# ...but keep the committed build scripts that live under build/
 # (the spec is re-included below, after the *.spec rule).
 !build/build-linux.sh
+!build/build-windows.ps1
 develop-eggs/
 dist/
 downloads/

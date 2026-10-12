@@ -48,7 +48,7 @@ class HabitFormScreen(ModalScreen):
     #title { text-style: bold; margin-bottom: 1; }
     #buttons { height: auto; align-horizontal: right; }
     #buttons Button { margin-left: 2; }
-    """
+    """ 
 
     BINDINGS = [("escape", "cancel", "Cancel")]
 

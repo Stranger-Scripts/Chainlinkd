@@ -157,7 +157,6 @@ wheels = [
 
 [[package]]
 name = "chainlinkd"
-version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "platformdirs" },
@@ -181,7 +180,7 @@ requires-dist = [
     { name = "textual", specifier = ">=8.2.7" },
     { name = "textual-dev", marker = "extra == 'dev'", specifier = ">=1.7.0" },
 ]
-provides-extras = ["dev", "build"]
+provides-extras = ["build", "dev"]
 
 [[package]]
 name = "click"
