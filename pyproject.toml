@@ -8,6 +8,7 @@ requires-python = ">=3.12"
 dependencies = [
     "textual>=8.2.7",
     "platformdirs>=4.10.1",
+    "tzdata>=2025.2",
 ]
 
 [project.optional-dependencies]

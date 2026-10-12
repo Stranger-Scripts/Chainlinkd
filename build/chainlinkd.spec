@@ -37,6 +37,11 @@ for package in ("textual", "rich"):
     binaries += pkg_binaries
     hiddenimports += pkg_hiddenimports
 
+tz_datas, tz_binaries, tz_hiddenimports = collect_all("tzdata")
+datas += tz_datas
+binaries += tz_binaries
+hiddenimports += tz_hiddenimports
+
 a = Analysis(
     [_root("packaging", "launcher.py")],
     pathex=[_root("src")],  # make the `chainlinkd` package importable

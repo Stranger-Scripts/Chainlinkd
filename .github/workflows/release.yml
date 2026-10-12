@@ -41,10 +41,10 @@ jobs:
             target: windows-x86_64
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
 
@@ -69,16 +69,16 @@ jobs:
       # argparse entry point, then exits cleanly.
       - name: Smoke test (Linux)
         if: runner.os == 'Linux'
+        env:
+          PYTHONTZPATH: ""
         run: ./dist/chainlinkd/chainlinkd --version
 
       - name: Smoke test (Windows)
         if: runner.os == 'Windows'
+        env:
+          PYTHONTZPATH: ""
         run: .\dist\chainlinkd\chainlinkd.exe --version
-
-      # Guards the most common packaging regression: schema.sql is loaded via
-      # importlib.resources at runtime, so a missing copy only fails on first
-      # launch, well after the build has gone green.
-      - name: Verify bundled schema.sql
+      - name: Verify bundled runtime data
         shell: bash
         run: |
           found=$(find dist/chainlinkd -name schema.sql -print -quit)
@@ -87,6 +87,14 @@ jobs:
             exit 1
           fi
           echo "found bundled schema at: $found"
+
+          for zone in UTC Europe/Berlin America/New_York; do
+            if [ -z "$(find dist/chainlinkd -path "*tzdata/zoneinfo/${zone}" -print -quit)" ]; then
+              echo "error: bundled tzdata is missing ${zone}" >&2
+              exit 1
+            fi
+          done
+          echo "bundled tzdata zones verified: $(find dist/chainlinkd -path '*tzdata/zoneinfo*' -type f | wc -l) files"
 
       - name: Resolve version
         id: version
@@ -117,7 +125,7 @@ jobs:
             | Out-File -Encoding ascii "$name.zip.sha256"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: chainlinkd-${{ matrix.target }}
           path: |
@@ -139,10 +147,10 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
